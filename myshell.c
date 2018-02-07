@@ -109,7 +109,7 @@ Documentation:
 ===========================================
 */
 void commhandler() {
-  if (strcmp(arguments[0], "cd")) {
+  if (strcmp(arguments[0], "cd") == 0) {
     chdir(arguments[1]);
   }
 }
