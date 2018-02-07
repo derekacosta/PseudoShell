@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
     while (prompt_input() == 0) {
       prompt_input();
     }
+    commhandler();
 
   }
 
@@ -77,6 +78,9 @@ input provided, returns with value of 0.
 */
 int prompt_input() {
   char *input;
+  char working_dir[2048];
+  getcwd(working_dir, sizeof(working_dir));
+  printf("Working Directory: %s\n", working_dir);
 
   input = readline("$");
   if (strlen(input) > 0) {
@@ -95,6 +99,18 @@ int prompt_input() {
   } else {
     // There was no readable input
     return 0;
+  }
+}
+
+/*
+============== COMMHANDLER ================
+Documentation:
+
+===========================================
+*/
+void commhandler() {
+  if (strcmp(arguments[0], "cd")) {
+    chdir(arguments[1]);
   }
 }
 
