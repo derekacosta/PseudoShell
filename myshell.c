@@ -25,10 +25,10 @@ const char *arguments[15];
 
 /* Function */
 void setup_GUI();
-int prompt_input(char *);
-
+int prompt_input();
+void commhandler();
+void pipehandler();
 int start_process();
-void change_dir(char *);
 
 /* Define Statements */
 #define clear() printf("\e[1;1H\e[2J");
@@ -43,8 +43,8 @@ int main(int argc, char *argv[])
 
   // Run the shell until exit
   while (1) {
-    while (prompt_input(user_input) == 0) {
-      prompt_input(user_input);
+    while (prompt_input() == 0) {
+      prompt_input();
     }
 
   }
@@ -68,18 +68,29 @@ void setup_GUI() {
 }
 
 /*
-============== PROMT_INPUT ================
+============== PROMPT_INPUT ===============
 Documentation:
-
+Prompts the user with $, takes following
+input and copies it to input_string. If no
+input provided, returns with value of 0.
 ===========================================
 */
-int prompt_input(char *input_string) {
+int prompt_input() {
   char *input;
 
   input = readline("$");
   if (strlen(input) > 0) {
     // IMPLEMENT HISTORY
-    strcpy(input_string, input);
+    // Process the input string
+    char *token;
+    token = strtok(input, " ");
+    int j = 0;
+    while( token != NULL ) {
+      arguments[j] = token;
+      token = strtok(NULL, " ");
+      j++;
+    }
+
     return 1;
   } else {
     // There was no readable input
@@ -109,16 +120,5 @@ int start_process(int program_number) {
   }
 
   return 0;
-}
-*/
-
-/*
-=================== CD ====================
-Documentation:
-
-===========================================
-
-void change_dir() {
-
 }
 */
