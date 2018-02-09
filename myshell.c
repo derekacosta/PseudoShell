@@ -26,6 +26,7 @@
 
 /* Global Variables */
 char *arguments[MAX_ARGS];
+char *bw_pipe_args[MAX_ARGS];  // Used when pipes are present
 
 /* Function */
 void setup_GUI();
@@ -35,6 +36,7 @@ void commhandler();
 void pipehandler(int);
 int start_process();
 void binify(int);
+int comm_swap();
 
 int main(int argc, char *argv[])
 {
@@ -52,10 +54,13 @@ int main(int argc, char *argv[])
     int pipes = is_pipe();
     if (pipes > 0) {
       // There is at least one pipe present
-      //pipehandler(pipes);
+      pipehandler(pipes);
     } else {
       commhandler();
     }
+
+    memset(arguments, 0, sizeof arguments);
+    memset(bw_pipe_args, 0, sizeof bw_pipe_args);
 
   }
 
@@ -138,11 +143,13 @@ function.
 ===========================================
 */
 void commhandler() {
+  // EXIT, CD, AND HISTORY
   if (strcmp(arguments[0], "cd") == 0) {
     chdir(arguments[1]);
   } else if (strcmp(arguments[0], "exit") == 0) {
     exit(0);
   }
+
   // EXECUTABLE FILE
   else if (access(arguments[0], X_OK) == 0) {
     // File exists and is executable.
@@ -173,49 +180,126 @@ void commhandler() {
 Handles commands with pipes. Support for
 1+ pipes is (not yet) included.
 pipefd[0] = read end, pipefd[1] = write end
+Reference: https://goo.gl/9jVSU6
 ===========================================
-
+*/
 void pipehandler(int num_pipes) {
-  // Set the array of file descriptors (2 are needed per pipe)
+  printf("In pipehandler\n");
+
+  // Set variables
   int pipefd[num_pipes * 2];
+  pid_t pid;
+  int num_comms = num_pipes + 1;
+  int comm_idx = 0;
 
   // Create the necessary pipes
-  for (int i = 0; i < count; i++) {
+  for (int i = 0; i < num_pipes; i++) {
     if(pipe(pipefd + i*2) < 0) {
       printf("Error: %s\n", "Pipe was unsuccessful.");
       exit(EXIT_FAILURE);
     }
   }
 
-  pid_t cpid;
-  char buf;
+  int d = 0;
+  for (int j = 0; j < num_comms; j++) {
+    // Switches out the bw_pipe_args array with the next command
+    comm_idx = comm_swap(comm_idx);
 
-  // Create the child process
-  cpid = fork();
-  if (cpid == -1) {
-    printf("Error: %s\n", "Fork was unsuccessful.");
-    exit(EXIT_FAILURE);
-  }
-  if (cpid == 0) {
-    // Child reads from pipe
-    close(pipefd[1]);
+    pid = fork();
+    if (pid < 0) {
+      // Fork was unsuccessful
+      printf("Error: %s\n", "fork() was unsuccessful.");
+    } else if (pid == 0) {
+      // Child Process
+      // Case 1: Not last command, Write pipes
+      if (j < num_comms - 1) {
+        if (dup2(pipefd[j + 1], 1) < 0) {
+          printf("Error: %s\n", "dup2() was unsuccessful.");
+          exit(EXIT_FAILURE);
+        }
+      }
+      // Case 2: if not first command, d is not zero, Read pipes
+      if (d != 0) {
+        if (dup2(pipefd[d - 2], 0) < 0) {
+          printf("Error: %s\n", "dup2() was unsuccessful.");
+          exit(EXIT_FAILURE);
+        }
+      }
 
-    while (read(pipefd[0], &buf, 1) > 0) {
-      write(STDOUT_FILENO, &buf, 1);
+      // Close pipes
+      for (int p = 0; p < 2 * num_pipes; p++) {
+        close(pipefd[p]);
+      }
+
+      printf("%s\n", bw_pipe_args[0]);
+      // Execute
+      binify(1);
+      if (access(arguments[0], X_OK) == 0) {
+        // File exists in /bin/ and is executable
+        execv(bw_pipe_args[0], bw_pipe_args);
+        printf("Error: %s\n", "execv() failed to execute. File may not exist.");
+        exit(127);
+      } else {
+        binify(2);
+        if (access(arguments[0], X_OK) == 0) {
+          // File exists in /usr/bin/ and is executable
+          execv(bw_pipe_args[0], bw_pipe_args);
+          printf("Error: %s\n", "execv() failed to execute. File may not exist.");
+          exit(127);
+        } else {
+          // File does not exist.
+          printf("Error: Executable file not found.");
+        }
+      }
+
     }
-    write(STDOUT_FILENO, "\n", 1);
-    close(pipefd[0]);
-    _exit(EXIT_SUCCESS);
 
-  } else {
-    close(pipefd[0]);
-    write(pipefd[1], argv[1], strlen(argv[1]));
-    close(pipefd[1]);
-    wait(NULL);
-    exit(EXIT_SUCCESS);
+    d += 2;
+
   }
+  // Close pipes
+  for (int p = 0; p < 2 * num_pipes; p++) {
+    close(pipefd[p]);
+  }
+
+  // Wait
+  for (int w = 0; w < num_pipes + 1; w++) {
+    waitpid(pid,0,0);
+  }
+
 }
+
+/*
+================ COMM_SWAP ================
+Switches out the bw_pipe_args array with
+the correct command and its args.
+===========================================
 */
+int comm_swap(int index) {
+  memset(bw_pipe_args, 0, sizeof bw_pipe_args);
+  for (size_t i = 0; i < sizeof arguments; i++) {
+    printf("Value of args in comm swap: %s\n", arguments[i]);
+  }
+
+  int g = 0;
+  while (arguments[index] != NULL) {
+    if (strcmp(arguments[index], "|") == 0) {
+      printf("%s\n", "In string comp");
+      return index+1;
+    }
+    bw_pipe_args[g] = arguments[index];
+    printf("Value of bpa in loop: %s\n", bw_pipe_args[g]);
+    index++;
+    g++;
+  }
+
+  for (size_t i = 0; i < sizeof bw_pipe_args; i++) {
+    printf("Value of bpa in comm swap: %s\n", bw_pipe_args[i]);
+  }
+
+  printf("%s\n", "Exiting comm_swap");
+  return -1;
+}
 
 /*
 ================= BINIFY ==================
@@ -246,8 +330,6 @@ void binify(int flag) {
 Called when the command is an executable
 file. File is executed with given command
 line arguments.
-flag = 0: No directory in arguments[0]
-flag = 1+: Directory in part of arguments[0]
 ===========================================
 */
 int start_process() {
