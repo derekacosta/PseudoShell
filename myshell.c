@@ -25,7 +25,7 @@
 #define MAX_ARGS 15
 
 /* Global Variables */
-const char *arguments[MAX_ARGS];
+char *arguments[MAX_ARGS];
 
 /* Function */
 void setup_GUI();
@@ -34,6 +34,7 @@ int is_pipe();
 void commhandler();
 void pipehandler(int);
 int start_process();
+void binify(int);
 
 int main(int argc, char *argv[])
 {
@@ -70,9 +71,9 @@ myShell.
 void setup_GUI() {
   // Clear the terminal window to make room for the shell program
   clear();
-  printf("\n\n ============================================================\n");
-  printf("\n\n                      Welcome to myShell                     \n");
-  printf("\n\n ============================================================\n");
+  printf("\n ==============================================================================\n");
+  printf("\n                               Welcome to myShell                              \n");
+  printf("\n ==============================================================================\n");
 }
 
 /*
@@ -137,17 +138,34 @@ function.
 ===========================================
 */
 void commhandler() {
-  //Check if arguments[0] is an executable file
-  if (access(arguments[0], X_OK) == 0) {
-    // File exists and is executable.
-    start_process();
-  }
-
   if (strcmp(arguments[0], "cd") == 0) {
     chdir(arguments[1]);
   } else if (strcmp(arguments[0], "exit") == 0) {
     exit(0);
   }
+  // EXECUTABLE FILE
+  else if (access(arguments[0], X_OK) == 0) {
+    // File exists and is executable.
+    start_process();
+  } else {
+    // File may exist, but dir path not given
+    binify(1);
+    if (access(arguments[0], X_OK) == 0) {
+      // File exists in /bin/ and is executable
+      start_process();
+    } else {
+      binify(2);
+      if (access(arguments[0], X_OK) == 0) {
+        // File exists in /usr/bin/ and is executable
+        printf("%s\n", arguments[0]);
+        start_process();
+      } else {
+        // File does not exist.
+        printf("Error: Executable file not found.");
+      }
+    }
+  }
+
 }
 
 /*
@@ -200,28 +218,49 @@ void pipehandler(int num_pipes) {
 */
 
 /*
+================= BINIFY ==================
+Appends the /bin/ path to arguments[0];
+===========================================
+*/
+void binify(int flag) {
+  char *bin;
+  if (flag == 1) {
+    bin = "/bin/";
+  } else if (flag == 2) {
+    bin = "/usr/bin/";
+  }
+
+  size_t arglen = strlen(arguments[0]);
+  size_t binlen = strlen(bin);
+
+  char *catted = malloc(arglen + binlen + 1);
+
+  memcpy(catted, bin, binlen);
+  memcpy(catted + binlen, arguments[0], arglen + 1);
+
+  arguments[0] = catted;
+}
+
+/*
 ============= START_PROCESS ===============
 Called when the command is an executable
 file. File is executed with given command
-line arguments. (NOT TESTED, warning
-generated at compile) --- needs fix
+line arguments.
+flag = 0: No directory in arguments[0]
+flag = 1+: Directory in part of arguments[0]
 ===========================================
 */
-int start_process(int program_number) {
+int start_process() {
   pid_t pid;
 
   if ((pid = fork()) == 0 ) {
     // Child process
-    char *args[MAX_ARGS];
-    for (int i = 1; i < MAX_ARGS; i++) {
-      args[i] = arguments[i];
-    }
-    execv(arguments[0], args);
-    printf("Error: %s\n", "execv() failed to execute");
+    execv(arguments[0], arguments);
+    printf("Error: %s\n", "execv() failed to execute. File may not exist.");
     exit(127);
   } else if (pid < 0) {
     // Fork was unsuccessful
-    perror("Error: ");
+    printf("Error: %s\n", "fork() was unsuccessful.");
   } else {
     // Parent process
     // wait for child to exit
