@@ -19,6 +19,10 @@
 #include <string.h>
 #include <readline/readline.h> /* for readline() */
 #include <readline/history.h> /* for readline() */
+#include <ctype.h>
+#include <stdbool.h>
+#include <sys/types.h>
+
 
 /* Define Statements */
 #define clear() printf("\e[1;1H\e[2J")
@@ -27,6 +31,8 @@
 /* Global Variables */
 char *arguments[MAX_ARGS];
 char *bw_pipe_args[MAX_ARGS];  // Used when pipes are present
+const int MAX_HISTORY = 100;
+
 
 /* Function */
 void setup_GUI();
@@ -37,6 +43,7 @@ void pipehandler(int);
 int start_process();
 void binify(int);
 int comm_swap();
+void historyController(char *history[], int *haddr, char* token, bool *waddr);
 
 int main(int argc, char *argv[])
 {
@@ -46,11 +53,35 @@ int main(int argc, char *argv[])
   // Setup the shell GUI
   setup_GUI();
 
+  //history
+	char *history[MAX_HISTORY];
+	memset(history, 0, sizeof(history));
+	int histInd = 0;
+	bool hasWrapped = false;
+	char *token;
   // Run the shell until exit
   while (1) {
-    while (prompt_input() == 0) {
-      prompt_input();
+
+  //allocating space in array for history
+	free(history[histInd]);
+	history[histInd] = malloc(strlen(user_input)+1);
+
+	//copies buffer into history array
+	strcpy(history[histInd], user_input);
+
+	//maintaining index
+	histInd++;
+	if (histInd >= MAX_HISTORY){
+		//checks if circular arr wrapped back
+		hasWrapped = true;
+	}
+    histInd = histInd % MAX_HISTORY;
+
+
+    while (prompt_input(token) == 0) {
+      prompt_input(token);
     }
+
     int pipes = is_pipe();
     if (pipes > 0) {
       // There is at least one pipe present
@@ -95,10 +126,10 @@ int prompt_input() {
   printf("Working Directory: %s\n", working_dir);
 
   input = readline("$");
+  // fgets(input,2048, stdin);
   if (strlen(input) > 0) {
     // IMPLEMENT HISTORY
     // Process the input string
-    char *token;
     token = strtok(input, " ");
     int j = 0;
     while( token != NULL ) {
@@ -148,6 +179,9 @@ void commhandler() {
     chdir(arguments[1]);
   } else if (strcmp(arguments[0], "exit") == 0) {
     exit(0);
+} else if (strcmp(arguments[0], "history") == 6) {
+    printf("input is history\n");
+	historyController(history, haddr, token, waddr);
   }
 
   // EXECUTABLE FILE
@@ -193,7 +227,8 @@ void pipehandler(int num_pipes) {
   int comm_idx = 0;
 
   // Create the necessary pipes
-  for (int i = 0; i < num_pipes; i++) {
+  int i;
+  for (i = 0; i < num_pipes; i++) {
     if(pipe(pipefd + i*2) < 0) {
       printf("Error: %s\n", "Pipe was unsuccessful.");
       exit(EXIT_FAILURE);
@@ -201,7 +236,8 @@ void pipehandler(int num_pipes) {
   }
 
   int d = 0;
-  for (int j = 0; j < num_comms; j++) {
+  int j;
+  for (j = 0; j < num_comms; j++) {
     // Switches out the bw_pipe_args array with the next command
     comm_idx = comm_swap(comm_idx);
 
@@ -227,7 +263,8 @@ void pipehandler(int num_pipes) {
       }
 
       // Close pipes
-      for (int p = 0; p < 2 * num_pipes; p++) {
+      int p;
+      for (p = 0; p < 2 * num_pipes; p++) {
         close(pipefd[p]);
       }
 
@@ -257,13 +294,15 @@ void pipehandler(int num_pipes) {
     d += 2;
 
   }
+  int p;
   // Close pipes
-  for (int p = 0; p < 2 * num_pipes; p++) {
+  for (p = 0; p < 2 * num_pipes; p++) {
     close(pipefd[p]);
   }
 
   // Wait
-  for (int w = 0; w < num_pipes + 1; w++) {
+  int w;
+  for (w = 0; w < num_pipes + 1; w++) {
     waitpid(pid,0,0);
   }
 
@@ -277,7 +316,8 @@ the correct command and its args.
 */
 int comm_swap(int index) {
   memset(bw_pipe_args, 0, sizeof bw_pipe_args);
-  for (size_t i = 0; i < sizeof arguments; i++) {
+  size_t i;
+  for (i = 0; i < sizeof arguments; i++) {
     printf("Value of args in comm swap: %s\n", arguments[i]);
   }
 
@@ -293,8 +333,9 @@ int comm_swap(int index) {
     g++;
   }
 
-  for (size_t i = 0; i < sizeof bw_pipe_args; i++) {
-    printf("Value of bpa in comm swap: %s\n", bw_pipe_args[i]);
+  size_t j;
+  for (j = 0; j < sizeof bw_pipe_args; j++) {
+    printf("Value of bpa in comm swap: %s\n", bw_pipe_args[j]);
   }
 
   printf("%s\n", "Exiting comm_swap");
@@ -350,4 +391,53 @@ int start_process() {
   }
 
   return 0;
+}
+
+
+
+void historyController(char *history[], int *haddr, char* token, bool *waddr){
+	int histInd = (*haddr);
+	int cmdInd;
+	bool hasWrapped = (*waddr);
+	token = strtok(NULL, " ");
+
+	if (token != NULL){
+//		printf("token is not null\n");
+
+		//clears history
+		if (strncmp(token, "-c", 1) == 0){
+//			printf("clearing history\n");
+
+			memset(history, 0, sizeof(history));
+			*haddr = 0;
+			*waddr = false;
+		}
+		//executes command at target index from history
+		else if (isdigit(token[0])){
+			cmdInd = atoi(token);
+//			printf("executing history cmd: %d\n", cmdInd);
+		}
+		//not a valid modifier
+		else{
+			printf("not a valid modifier\n");
+		}
+	}
+	//if not extra arguments print history
+	else{
+//		printf("token is null\n");
+		int i;
+		if (hasWrapped == false){
+			for(i = 0; i < histInd; i++){
+				printf("%d %s",i, history[i]);
+			}
+		}
+		else{
+			int j;
+			for(i = 0; i < MAX_HISTORY; i++){
+				j = (histInd + i) % MAX_HISTORY;
+				printf("%d %s", i, history[j]);
+			}
+		}
+	}
+//	printf("leaving function\n");
 }
