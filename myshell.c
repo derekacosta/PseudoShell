@@ -16,6 +16,7 @@
 #include <unistd.h> /* for fork, chdir */
 #include <sys/types.h> /* for pid_t */
 #include <sys/wait.h> /* for wait */
+#include <fcntl.h>
 #include <string.h>
 #include <readline/readline.h> /* for readline() */
 #include <readline/history.h> /* for readline() */
@@ -41,7 +42,7 @@ int is_pipe();
 void commhandler();
 void pipehandler(int);
 int start_process();
-void binify(int);
+int binify(int);
 int comm_swap();
 void historyController(char *history[], int *haddr, char* token, bool *waddr);
 
@@ -62,19 +63,19 @@ int main(int argc, char *argv[])
   // Run the shell until exit
   while (1) {
 
-  //allocating space in array for history
-	free(history[histInd]);
-	history[histInd] = malloc(strlen(user_input)+1);
+    //allocating space in array for history
+  	free(history[histInd]);
+  	history[histInd] = malloc(strlen(user_input)+1);
 
-	//copies buffer into history array
-	strcpy(history[histInd], user_input);
+  	//copies buffer into history array
+  	strcpy(history[histInd], user_input);
 
-	//maintaining index
-	histInd++;
-	if (histInd >= MAX_HISTORY){
-		//checks if circular arr wrapped back
-		hasWrapped = true;
-	}
+  	//maintaining index
+  	histInd++;
+  	if (histInd >= MAX_HISTORY){
+  		//checks if circular arr wrapped back
+  		hasWrapped = true;
+  	}
     histInd = histInd % MAX_HISTORY;
 
 
@@ -130,6 +131,7 @@ int prompt_input() {
   if (strlen(input) > 0) {
     // IMPLEMENT HISTORY
     // Process the input string
+    char *token;
     token = strtok(input, " ");
     int j = 0;
     while( token != NULL ) {
@@ -179,32 +181,20 @@ void commhandler() {
     chdir(arguments[1]);
   } else if (strcmp(arguments[0], "exit") == 0) {
     exit(0);
-} else if (strcmp(arguments[0], "history") == 6) {
+
+  } /*else if (strcmp(arguments[0], "history") == 6) {
     printf("input is history\n");
 	historyController(history, haddr, token, waddr);
   }
+  */
 
   // EXECUTABLE FILE
-  else if (access(arguments[0], X_OK) == 0) {
+  else if (binify(1) > 0) {
     // File exists and is executable.
     start_process();
   } else {
-    // File may exist, but dir path not given
-    binify(1);
-    if (access(arguments[0], X_OK) == 0) {
-      // File exists in /bin/ and is executable
-      start_process();
-    } else {
-      binify(2);
-      if (access(arguments[0], X_OK) == 0) {
-        // File exists in /usr/bin/ and is executable
-        printf("%s\n", arguments[0]);
-        start_process();
-      } else {
-        // File does not exist.
-        printf("Error: Executable file not found.");
-      }
-    }
+    // File does not exist.
+    printf("Error: Executable file not found.");
   }
 
 }
@@ -218,8 +208,6 @@ Reference: https://goo.gl/9jVSU6
 ===========================================
 */
 void pipehandler(int num_pipes) {
-  printf("In pipehandler\n");
-
   // Set variables
   int pipefd[num_pipes * 2];
   pid_t pid;
@@ -227,8 +215,7 @@ void pipehandler(int num_pipes) {
   int comm_idx = 0;
 
   // Create the necessary pipes
-  int i;
-  for (i = 0; i < num_pipes; i++) {
+  for (int i = 0; i < num_pipes; i++) {
     if(pipe(pipefd + i*2) < 0) {
       printf("Error: %s\n", "Pipe was unsuccessful.");
       exit(EXIT_FAILURE);
@@ -236,12 +223,12 @@ void pipehandler(int num_pipes) {
   }
 
   int d = 0;
-  int j;
-  for (j = 0; j < num_comms; j++) {
+  for (int j = 0; j < num_comms; j++) {
     // Switches out the bw_pipe_args array with the next command
     comm_idx = comm_swap(comm_idx);
 
     pid = fork();
+
     if (pid < 0) {
       // Fork was unsuccessful
       printf("Error: %s\n", "fork() was unsuccessful.");
@@ -249,13 +236,13 @@ void pipehandler(int num_pipes) {
       // Child Process
       // Case 1: Not last command, Write pipes
       if (j < num_comms - 1) {
-        if (dup2(pipefd[j + 1], 1) < 0) {
+        if (dup2(pipefd[d + 1], 1) < 0) {
           printf("Error: %s\n", "dup2() was unsuccessful.");
           exit(EXIT_FAILURE);
         }
       }
       // Case 2: if not first command, d is not zero, Read pipes
-      if (d != 0) {
+      if (j != 0) {
         if (dup2(pipefd[d - 2], 0) < 0) {
           printf("Error: %s\n", "dup2() was unsuccessful.");
           exit(EXIT_FAILURE);
@@ -263,46 +250,31 @@ void pipehandler(int num_pipes) {
       }
 
       // Close pipes
-      int p;
-      for (p = 0; p < 2 * num_pipes; p++) {
+      for (int p = 0; p < 2 * num_pipes; p++) {
         close(pipefd[p]);
       }
 
-      printf("%s\n", bw_pipe_args[0]);
       // Execute
-      binify(1);
-      if (access(arguments[0], X_OK) == 0) {
+      if (binify(2) > 0) {
         // File exists in /bin/ and is executable
         execv(bw_pipe_args[0], bw_pipe_args);
         printf("Error: %s\n", "execv() failed to execute. File may not exist.");
         exit(127);
       } else {
-        binify(2);
-        if (access(arguments[0], X_OK) == 0) {
-          // File exists in /usr/bin/ and is executable
-          execv(bw_pipe_args[0], bw_pipe_args);
-          printf("Error: %s\n", "execv() failed to execute. File may not exist.");
-          exit(127);
-        } else {
-          // File does not exist.
-          printf("Error: Executable file not found.");
-        }
+        // File does not exist.
+        printf("Error: Executable file not found.\n");
       }
-
-    }
-
+    } // End else if(pid == 0)
     d += 2;
 
-  }
-  int p;
+  } // End for
   // Close pipes
-  for (p = 0; p < 2 * num_pipes; p++) {
+  for (int p = 0; p < 2 * num_pipes; p++) {
     close(pipefd[p]);
   }
 
   // Wait
-  int w;
-  for (w = 0; w < num_pipes + 1; w++) {
+  for (int w = 0; w < num_pipes + 1; w++) {
     waitpid(pid,0,0);
   }
 
@@ -316,29 +288,16 @@ the correct command and its args.
 */
 int comm_swap(int index) {
   memset(bw_pipe_args, 0, sizeof bw_pipe_args);
-  size_t i;
-  for (i = 0; i < sizeof arguments; i++) {
-    printf("Value of args in comm swap: %s\n", arguments[i]);
-  }
-
   int g = 0;
   while (arguments[index] != NULL) {
     if (strcmp(arguments[index], "|") == 0) {
-      printf("%s\n", "In string comp");
       return index+1;
     }
     bw_pipe_args[g] = arguments[index];
-    printf("Value of bpa in loop: %s\n", bw_pipe_args[g]);
     index++;
     g++;
   }
 
-  size_t j;
-  for (j = 0; j < sizeof bw_pipe_args; j++) {
-    printf("Value of bpa in comm swap: %s\n", bw_pipe_args[j]);
-  }
-
-  printf("%s\n", "Exiting comm_swap");
   return -1;
 }
 
@@ -347,23 +306,61 @@ int comm_swap(int index) {
 Appends the /bin/ path to arguments[0];
 ===========================================
 */
-void binify(int flag) {
-  char *bin;
+int binify(int flag) {
+  char *bin = "/bin/";
+  char *usrbin = "/usr/bin/";
   if (flag == 1) {
-    bin = "/bin/";
+    // use arguments array
+    size_t arglen = strlen(arguments[0]);
+    size_t usrbinlen = strlen(usrbin);
+    size_t binlen = strlen(bin);
+
+    char *cattedbin = malloc(arglen + binlen + 1);
+    char *cattedusrbin = malloc(arglen + usrbinlen + 1);
+
+    memcpy(cattedbin, bin, binlen);
+    memcpy(cattedbin + binlen, arguments[0], arglen + 1);
+
+    memcpy(cattedusrbin, usrbin, usrbinlen);
+    memcpy(cattedusrbin + usrbinlen, arguments[0], arglen + 1);
+
+    if (access(cattedbin, X_OK) == 0) {
+      // File exists in /bin/ and is executable
+      arguments[0] = cattedbin;
+      return 1;
+    } else if (access(cattedusrbin, X_OK) == 0) {
+      // File exists in /usr/bin/ and is executable
+      arguments[0] = cattedusrbin;
+      return 1;
+    }
+
   } else if (flag == 2) {
-    bin = "/usr/bin/";
+    // use bw_pipe_args array
+    size_t arglen = strlen(bw_pipe_args[0]);
+    size_t usrbinlen = strlen(usrbin);
+    size_t binlen = strlen(bin);
+
+    char *cattedbin = malloc(arglen + binlen + 1);
+    char *cattedusrbin = malloc(arglen + usrbinlen + 1);
+
+    memcpy(cattedbin, bin, binlen);
+    memcpy(cattedbin + binlen, bw_pipe_args[0], arglen + 1);
+
+    memcpy(cattedusrbin, usrbin, usrbinlen);
+    memcpy(cattedusrbin + usrbinlen, bw_pipe_args[0], arglen + 1);
+
+    if (access(cattedbin, X_OK) == 0) {
+      // File exists in /bin/ and is executable
+      bw_pipe_args[0] = cattedbin;
+      return 1;
+    } else if (access(cattedusrbin, X_OK) == 0) {
+      // File exists in /usr/bin/ and is executable
+      bw_pipe_args[0] = cattedusrbin;
+      return 1;
+    }
   }
+  return 0;
 
-  size_t arglen = strlen(arguments[0]);
-  size_t binlen = strlen(bin);
-
-  char *catted = malloc(arglen + binlen + 1);
-
-  memcpy(catted, bin, binlen);
-  memcpy(catted + binlen, arguments[0], arglen + 1);
-
-  arguments[0] = catted;
 }
 
 /*
@@ -394,7 +391,7 @@ int start_process() {
 }
 
 
-
+/*
 void historyController(char *history[], int *haddr, char* token, bool *waddr){
 	int histInd = (*haddr);
 	int cmdInd;
@@ -441,3 +438,4 @@ void historyController(char *history[], int *haddr, char* token, bool *waddr){
 	}
 //	printf("leaving function\n");
 }
+*/
