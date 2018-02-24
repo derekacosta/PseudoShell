@@ -189,7 +189,9 @@ void commhandler() {
   */
 
   // EXECUTABLE FILE
-  else if (binify(1) > 0) {
+  else if (access(arguments[0], X_OK) == 0) {
+    start_process();
+  } else if (binify(1) > 0) {
     // File exists and is executable.
     start_process();
   } else {
