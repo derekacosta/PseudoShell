@@ -196,7 +196,7 @@ void commhandler() {
     start_process();
   } else {
     // File does not exist.
-    printf("Error: Executable file not found.");
+    printf("Error: Executable file not found.\n");
   }
 
 }
