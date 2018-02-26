@@ -433,8 +433,13 @@ void historyController(){
                                         _token = strtok(NULL, " ");
                                         j++;
                                 }
-                                commhandler();
-                        }
+                                int pipes = is_pipe();
+                                if (pipes > 0) {
+                                        // There is at least one pipe present
+                                        pipehandler(pipes);
+                                } else {
+                                        commhandler();
+                                }                        }
                         else {
                                 // printf("Command to be executed: %s at offset %d", history[cmdInd], cmdInd);
 //                printf("token=%s", token);
@@ -447,8 +452,13 @@ void historyController(){
                                         _token = strtok(NULL, " ");
                                         j++;
                                 }
-                                commhandler();
-//              cancels carriage return when history prints again, needs to be fixed
+                                int pipes = is_pipe();
+                                if (pipes > 0) {
+                                        // There is at least one pipe present
+                                        pipehandler(pipes);
+                                } else {
+                                        commhandler();
+                                }//              cancels carriage return when history prints again, needs to be fixed
                         }
                 }
                 //not a valid modifier
