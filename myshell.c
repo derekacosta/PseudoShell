@@ -108,9 +108,11 @@ void setup_GUI() {
  */
 int prompt_input() {
         char *input;
+        /*
         char working_dir[2048];
         getcwd(working_dir, sizeof(working_dir));
         printf("Working Directory: %s\n", working_dir);
+        */
 
         input = readline("$");
         // fgets(input,2048, stdin);
